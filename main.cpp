@@ -55,9 +55,9 @@ class window_handler
         bool done = false;
 
         //window variables
-        const char* version = "Exprise v: 0.1.0";
+        const char* version = "Exprise v: 0.1.1";
         ImGuiViewport* main_viewport;
-
+        ImGuiWindowFlags imgui_window_flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize;
     public:
         void init_window();
         void main_loop();
@@ -182,17 +182,18 @@ void window_handler::cleanup()
     SDL_Quit();
 }
 
-void window_handler::ShowMainWindow(bool* p_open)
+void window_handler::ShowMainWindow(bool* p_open = NULL)
 {
     main_viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(main_viewport->WorkPos.x, main_viewport->WorkPos.y), ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2(640, 480), ImGuiCond_Always);
-    if (!ImGui::Begin(version, p_open, window_flags))
+    if (!ImGui::Begin(version, p_open, imgui_window_flags))
     {
         // Early out if the window is collapsed, as an optimization.
         ImGui::End();
         return;
     }
+    ImGui::SeparatorText(version);
 }
 
 void ShowDebugWindow()
