@@ -1,22 +1,22 @@
-cmake_minimum_required(VERSION 3.12.0)
-project(exprise VERSION 0.1.0 LANGUAGES C CXX)
+cmake_minimum_required(VERSION 3.21.0)
+project(exprise VERSION 0.2.1 LANGUAGES C CXX)
 
 
 include(CTest)
 enable_testing()
 
-add_library("glad" "E:/code/exprise/lib/glad/src/glad.c")
+add_library("glad" "lib/glad/src/glad.c")
 
-include_directories("E:/code/exprise/lib/glad/include")
-include_directories("E:/code/exprise/lib/sdl/source/include")
+include_directories("lib/glad/include")
+include_directories("lib/sdl/source/include")
 
 find_package(OpenGL REQUIRED)
 find_package(OpenCV REQUIRED)
 # SDL library
-find_library(SDL SDL2 PATHS "E:/code/exprise/lib/sdl/win32/lib64")
+find_library(SDL SDL2 PATHS "lib/sdl/win32/lib64")
 # that is needed on Windows for main function
-find_library(SDLmain SDL2main PATHS "E:/code/exprise/lib/sdl/win32/lib64")
-find_library(GLFW glfw3 PATHS "E:/code/exprise/lib/glfw/lib-vc2022")
+find_library(SDLmain SDL2main PATHS "lib/sdl/win32/lib64")
+find_library(GLFW glfw3 PATHS "lib/glfw/lib-vc2022")
 
 include_directories( ${OpenCV_INCLUDE_DIRS} )
 
