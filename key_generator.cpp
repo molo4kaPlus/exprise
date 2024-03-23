@@ -1,60 +1,86 @@
+#include "cryptopp/aes.h"
+#include "cryptopp/modes.h"
 #include <iostream>
 #include <string>
+#include <cstdlib>
+#include "cryptopp/cryptlib.h"
+#include "cryptopp/hex.h"
+#include "cryptopp/filters.h"
+#include "cryptopp/secblock.h"
+#include "cryptopp/sha.h"
+#include "cryptopp/md5.h"
+#include "cryptopp/hmac.h"
+#include <cstddef>
+#include <cassert>
+#include <cstdint>
 #include <time.h>
-#include <vector>
-#include <conio.h>
 
 using namespace std;
+using namespace CryptoPP;
 
-string encrypt(string input) {
-    string word = input;
-    string alphabet = "abcdefghijklmnopqrstuvwxyz1234567890";
+string encryptStringAES(const string key, const string plaintext) {
+    byte aesKey[AES::DEFAULT_KEYLENGTH];
+    memset(aesKey, 0x00, AES::DEFAULT_KEYLENGTH);
+    memcpy(aesKey, key.c_str(), min(key.length(), static_cast<size_t>(AES::DEFAULT_KEYLENGTH)));
 
-    for (int i = 0; i < word.size(); i++) {
-        for (int j = 0; j < alphabet.size(); j++) {
-            if(word[j] == alphabet[j])
-            {
-                word[i] = alphabet[0];
-                break;
-            }        
-        }       
+    string ciphertext;
+
+    try {
+        ECB_Mode<AES>::Encryption encryptor;
+        encryptor.SetKey(aesKey, AES::DEFAULT_KEYLENGTH);
+
+        StringSource(plaintext, true,
+            new StreamTransformationFilter(encryptor,
+                new HexEncoder(
+                    new StringSink(ciphertext)
+                )
+            )
+        );
     }
-    return word;
-} 
-
-// Ðàñøèôðîâêà
-string decrypt(string input) {
-    string word = input;
-    string alphabet = "abcdefghijklmnopqrstuvwxyz1234567890";
-
-    for (int i = 0; i < word.size(); i++) {
-        for (int j = 0; j < alphabet.size(); j++) {
-            if(word[j] == alphabet[j])
-            {
-                word[i] = alphabet[(j - i) % 37];
-                break;
-            }        
-        }       
+    catch(const CryptoPP::Exception& e) {
+        cerr << e.what() << endl;
+        exit(1);
     }
-    return word;
+
+    return ciphertext;
 }
 
+string decryptStringAES(const string key, const string ciphertext) {
+    byte aesKey[AES::DEFAULT_KEYLENGTH];
+    memset(aesKey, 0x00, AES::DEFAULT_KEYLENGTH);
+    memcpy(aesKey, key.c_str(), min(key.length(), static_cast<size_t>(AES::DEFAULT_KEYLENGTH)));
+
+    string decryptedtext;
+
+    try {
+        ECB_Mode<AES>::Decryption decryptor;
+        decryptor.SetKey(aesKey, AES::DEFAULT_KEYLENGTH);
+
+        StringSource(ciphertext, true,
+            new HexDecoder(
+                new StreamTransformationFilter(decryptor,
+                    new StringSink(decryptedtext)
+                )
+            )
+        );
+    }
+    catch(const CryptoPP::Exception& e) {
+        return "0";
+    }
+
+    return decryptedtext;
+}
 
 int main() {
-    int start_time = time(NULL);
-    int end_time = start_time + (3600 * 24);
-    string MAC = "a8a159119c5f";
+    string key = "0fffb92f6d1";
+    //string key = "0fffb92f6d1";
+    string plaintext = to_string(time(NULL) + 86400);
 
-    string encrypted = MAC + to_string(end_time);
+    string ciphertext = encryptStringAES(key, plaintext);
+    cout << "Ciphertext: " << ciphertext << endl;
 
-    cout << "To encrypt: " << encrypted << endl;
-    encrypted = encrypt(encrypted);
-    cout << "Encrypted: " << encrypted << endl;
-
-    string decrypted = decrypt(encrypted);
-    cout << "Decrypted: " << decrypted << endl;
-
-    
+    cout << "text: " << decryptStringAES(key, ciphertext) << endl;
 
     return 0;
+    // мой ключ 651482DA86310434F16C5793069321C1
 }

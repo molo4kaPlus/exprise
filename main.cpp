@@ -25,11 +25,18 @@
 #include <ctime>
 #include <thread>
 
+// CryproPP
+#include "cryptopp/base64.h"
+#include "cryptopp/aes.h"
+#include "cryptopp/modes.h"
+#include "cryptopp/hex.h"
+
 #pragma comment(lib, "iphlpapi.lib")
 #pragma warning(disable : 4996)
 
 using namespace cv;
 using namespace std;
+using namespace CryptoPP;
 
 /*
 error listing: 
@@ -55,6 +62,32 @@ static string GetMACaddress() {
     return ss.str();
 }
 
+string decryptStringAES(const string key, const string ciphertext) {
+    byte aesKey[AES::DEFAULT_KEYLENGTH];
+    memset(aesKey, 0x00, AES::DEFAULT_KEYLENGTH);
+    memcpy(aesKey, key.c_str(), min(key.length(), static_cast<size_t>(AES::DEFAULT_KEYLENGTH)));
+
+    string decryptedtext;
+
+    try {
+        ECB_Mode<AES>::Decryption decryptor;
+        decryptor.SetKey(aesKey, AES::DEFAULT_KEYLENGTH);
+
+        StringSource(ciphertext, true,
+            new HexDecoder(
+                new StreamTransformationFilter(decryptor,
+                    new StringSink(decryptedtext)
+                )
+            )
+        );
+    }
+    catch(const CryptoPP::Exception& e) {
+        return "0";
+    }
+
+    return decryptedtext;
+}
+
 class window_handler
 {
     private:
@@ -77,9 +110,10 @@ class window_handler
         ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
         ImVec4 gray_color = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
         bool done = false;
+        bool open_popup;
 
         //window variables
-        const char* version = "Exprise v: 0.2.1";
+        const char* version = "Exprise v: 0.2.2";
         ImGuiViewport* main_viewport;
         ImGuiWindowFlags imgui_window_flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize;
         
@@ -98,6 +132,8 @@ class window_handler
         int resolution_x;
         int resolution_y;
         Vec3b color = {63, 254, 254};    // искомый цвет
+        int hold_button = VK_XBUTTON1;
+        int fire_button = 0x4A;
 
         //opencv variables
         HWND hwnd;
@@ -131,6 +167,8 @@ class window_handler
         void have_to_fire(Mat pixel_mat, int scan_radius, Vec3b color);
         void exprise_loop();
         void start_exprise_thread();
+        void set_hold_button();
+        void set_fire_button();
 
         void validation_procces();
         void validate_key(string key);
@@ -302,8 +340,9 @@ void window_handler::ShowMainWindow(bool* p_open = NULL)
     {
         if (ImGui::BeginTable("split", 2)){
             ImGui::TableNextColumn(); 
+            if(ImGui::Button("Set hold button")) { set_hold_button(); }
+            if(ImGui::Button("Set fire button")) { set_fire_button(); }
             if(ImGui::Button({"Validate key"})) { validator = thread(&window_handler::validation_procces, this); validator.detach(); }
-            ImGui::Text(string_time_left.c_str());
             ImGui::TableNextColumn();
             if (access_enabled) 
             {
@@ -319,6 +358,7 @@ void window_handler::ShowMainWindow(bool* p_open = NULL)
             if (access_enabled)
                 if(ImGui::Button({"Stop         "})) {  }
             ImGui::PopStyleColor();
+            if (string_time_left != "0") { ImGui::Text(string_time_left.c_str()); }
             ImGui::EndTable();
         }
     }
@@ -411,7 +451,7 @@ void window_handler::have_to_fire(Mat pixel_mat, int scan_radius, Vec3b color)
         for (int j = 0; j < scan_radius; j++) {
             if (diff_CIE76(color, pixel_mat.at<Vec3b>(i, j)) <= color_sensivity) {
                 this_thread::sleep_for(chrono::milliseconds(trigger_delay)); 
-                keybd_event(0x4A, 0, 0, 0); keybd_event(0x4A, 0, KEYEVENTF_KEYUP, 0);
+                keybd_event(fire_button, 0, 0, 0); keybd_event(fire_button, 0, KEYEVENTF_KEYUP, 0);
                 this_thread::sleep_for(chrono::milliseconds(trigger_delay_after));
                 return;
             }
@@ -456,7 +496,7 @@ void window_handler::exprise_loop()
     cout << "[INFO] exprise started" << endl;
     while(!stop)
     {
-        if (GetAsyncKeyState(VK_XBUTTON1) < 0)
+        if (GetAsyncKeyState(hold_button) < 0)
         {
             get_pixels(hwindowCompatibleDC, hwindowDC, bi, hbwindow, pixel_matrix, scan_radius, resolution_x, resolution_y);
             //cout << "screen captured." << endl;
@@ -469,15 +509,12 @@ void window_handler::exprise_loop()
 
 void window_handler::validate_key(string key)
 {
-    if (key == "") { time_left = 0; cout << "1" << endl; return; }
-
-    string temp = key;
-    string MAC;
-    int j = 0;
-
-    
-
-    time_left = stoi(temp1) - time(NULL);    
+    if (key == "") { time_left = 0; return; }
+    string time_string = decryptStringAES(MAC_adress, key);
+    //cout << time_string << endl;
+    if (time_string == "0") { time_left = 0; return; }
+    if (stoi(time_string) > time(NULL)) { time_left = stoi(time_string) - time(NULL); return; }
+    else { time_left = 0; return; }    
 }
 
 void window_handler::validation_procces()
@@ -488,8 +525,47 @@ void window_handler::validation_procces()
         if (time_left > 0) { access_enabled = true; }
         else { access_enabled = false; stop = true; is_exprise_enabled = false; return; }
         string_time_left = "time left: " + to_string(time_left / 3600) + "hrs." + to_string((time_left % 3600) / 60) + "min."; 
-        cout << "time left: " << to_string(time_left) << endl;
+        //cout << "time left: " << to_string(time_left) << endl;
         this_thread::sleep_for(chrono::seconds(15));
+    }
+}
+
+void window_handler::set_hold_button()
+{
+    while (true) {
+        for (int i = 0; i < 256; i++) {
+            if (GetAsyncKeyState(i) & 0x8000) {
+                hold_button = i;
+                byte key = (BYTE)i;
+                std::cout << "[INFO] New hold button keycode: 0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(key) << std::endl;
+                Sleep(100); // Добавляем задержку, чтобы избежать множественного вывода нажатий
+                
+                // Ожидаем, пока клавиша не будет отпущена
+                while (GetAsyncKeyState(i) & 0x8000) {
+                    Sleep(100);
+                }
+                return;
+            }
+        }
+    }
+}
+void window_handler::set_fire_button()
+{
+    while (true) {
+        for (int i = 0; i < 256; i++) {
+            if (GetAsyncKeyState(i) & 0x8000) {
+                fire_button = i;
+                byte key = (BYTE)i;
+                std::cout << "[INFO] New fire button keycode: 0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(key) << std::endl;
+                Sleep(100); // Добавляем задержку, чтобы избежать множественного вывода нажатий
+                
+                // Ожидаем, пока клавиша не будет отпущена
+                while (GetAsyncKeyState(i) & 0x8000) {
+                    Sleep(100);
+                }
+                return;
+            }
+        }
     }
 }
 
